@@ -25,13 +25,3 @@ class Mail_module:
         server.login(self.username,self.password)
         problems = server.sendmail(self.from_addr, to_addr, msg.as_string())
         server.quit()
-
-if __name__ == "__main__":
-    username = input("Enter username: ")
-    pw = input("Enter pw: ")
-    server = 'smtp.gmail.com:587'
-
-    mm = Mail_module( username, pw, server )
-    mm.set_from("Test Bot")
-    mm.sendmail( 'zhaolonglee@gmail.com', 'test mail', 'this is the message\nline2\n')
-    
