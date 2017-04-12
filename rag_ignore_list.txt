@@ -2,3 +2,4 @@ Castle Treasure Box
 Burning Heart
 Carrot
 Apple
+Green Herb

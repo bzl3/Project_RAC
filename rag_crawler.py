@@ -1,6 +1,5 @@
 from lxml import html
 import requests
-import winsound
 import time
 from Mail_module import Mail_module
 
@@ -11,6 +10,7 @@ WATCH_LIST = "rag_watch_list.txt"
 MAIL_SERVER = 'smtp.gmail.com:587'
 REFRESH_TIME = 7200 # report list item refresh rate in second, 2H
 CLEAN_COUNTER = 12 
+IGNORE_COUNTER = 200
 
 def text(elt):
     return elt.text_content().replace(u'\xa0', u' ')
@@ -21,6 +21,7 @@ class item:
         self.price = price
         self.discount = discount
         self.time = time
+        self.counter = 0
         
 
 class Rag_crawler:
@@ -33,10 +34,12 @@ class Rag_crawler:
         with open(WATCH_LIST) as f:
             self.watch_list = f.readlines()
         self.watch_list = [x.strip() for x in self.watch_list]
+        f.close()
 
         with open(IGNORE_LIST) as f:
             self.ignore_list = f.readlines()
         self.ignore_list = [x.strip() for x in self.ignore_list]
+        f.close()
 
     def init_mail_module( self, username, pw, to_addr ):
         self.mm = Mail_module( username, pw, MAIL_SERVER )
@@ -61,7 +64,7 @@ class Rag_crawler:
                 data = [[text(td) for td in tr.xpath('td')] for tr in table.xpath('//tr')]
                 for i in range (1, len(data)):
                     item_name = data[i][0].lstrip()
-                    item_price = data[i][2].replace('z', '')
+                    item_price = int (data[i][2].replace('z', '').replace(',',''))
                     discount = int(data[i][3].replace('-','').replace('%', ''))
 
                     if ( item_name in self.ignore_list ):
@@ -70,14 +73,16 @@ class Rag_crawler:
                     if ( discount >= self.report or (item_name in self.watch_list)):
                         if ( item_name in self.report_list ):
                             # Possibly already report this item
-                            if ( self.report_list[item_name].discount > discount ):
+                            if ( self.report_list[item_name].price > item_price ):
+                                self.report_list[item_name].price = item_price
                                 self.report_list[item_name].discount = discount
                                 self.report_list[item_name].time = time.time()
+                                self.report_list[item_name].counter = 0
                                 #print("Found lower price for %s" %(item_name))
-                                msg = msg + "%s, %s, %d\n" %(item_name, item_price, discount)
+                                msg = msg + "%s, %d, %d\n" %(item_name, item_price, discount)
                                 report = True
                             else:
-                                #print("Already reported (%s)" %(item_name))
+                                self.report_list[item_name].counter += 1
                                 continue
                         else: # not in list
                             #print("inserting %s into list" %(item_name))
@@ -88,18 +93,19 @@ class Rag_crawler:
         if ( report ):
             self.mm.sendmail(self.mm.to_addr, "Rag Discount Item", msg)
             print("mail content: \n%s" %(msg))
-        else :
-            print("Did not found anything new")
-            
+
     def clean_report_list( self ):
         print("Running clean_report_list")
         now = time.time()
         key_list = list(self.report_list.keys())
         for k in key_list:
             if ( REFRESH_TIME < int(now - self.report_list[k].time) ):
+                if ( self.report_list[k].counter > IGNORE_COUNTER ):
+                    # Add to ignore list and update struct
+                    f = open(IGNORE_LIST, "a")
+                    f.write( "%s\n" %(self.report_list[k].name) )
+                    self.ignore_list.append( self.report_list[k].name )
                 del self.report_list[k]
-                
-
 
 if __name__ == "__main__":
     clean_counter = CLEAN_COUNTER
